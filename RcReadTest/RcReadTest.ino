@@ -1,73 +1,63 @@
-#define RC_CENTRE 1500
-#define RC_DOWN 1100
-#define RC_UP 1900
-#define RC_ERROR 100
+#include <EnableInterrupt.h>
 
-#define PIN_2WAY 0
-#define PIN_3WAY 1
+#define SERIAL_PORT_SPEED 115200
+#define RC_NUM_CHANNELS  4
 
-volatile int pwm_2WAY = 0;
-volatile int init_2WAY = 0;
-volatile int pwm_3WAY = 0;
-volatile int init_3WAY = 0;
+#define RC_CH1  0
+#define RC_CH2  1
+#define RC_CH3  2
+#define RC_CH4  3
 
-String pos_2WAY = "";
-String pos_3WAY = "";
- 
+#define RC_CH1_INPUT  A0
+#define RC_CH2_INPUT  A1
+#define RC_CH3_INPUT  A2
+#define RC_CH4_INPUT  A3
+
+uint16_t rc_values[RC_NUM_CHANNELS];
+uint32_t rc_start[RC_NUM_CHANNELS];
+volatile uint16_t rc_shared[RC_NUM_CHANNELS];
+
+void rc_read_values() {
+  noInterrupts();
+  memcpy(rc_values, (const void *)rc_shared, sizeof(rc_shared));
+  interrupts();
+}
+
+void calc_input(uint8_t channel, uint8_t input_pin) {
+  if (digitalRead(input_pin) == HIGH) {
+    rc_start[channel] = micros();
+  } else {
+    uint16_t rc_compare = (uint16_t)(micros() - rc_start[channel]);
+    rc_shared[channel] = rc_compare;
+  }
+}
+
+void calc_ch1() { calc_input(RC_CH1, RC_CH1_INPUT); }
+void calc_ch2() { calc_input(RC_CH2, RC_CH2_INPUT); }
+void calc_ch3() { calc_input(RC_CH3, RC_CH3_INPUT); }
+void calc_ch4() { calc_input(RC_CH4, RC_CH4_INPUT); }
+
 void setup() {
-  Serial.begin(115200);
-  attachInterrupt(PIN_2WAY, rising_2WAY, RISING);
-  attachInterrupt(PIN_3WAY, rising_3WAY, RISING);
+  Serial.begin(SERIAL_PORT_SPEED);
+
+  pinMode(RC_CH1_INPUT, INPUT);
+  pinMode(RC_CH2_INPUT, INPUT);
+  pinMode(RC_CH3_INPUT, INPUT);
+  pinMode(RC_CH4_INPUT, INPUT);
+
+  enableInterrupt(RC_CH1_INPUT, calc_ch1, CHANGE);
+  enableInterrupt(RC_CH2_INPUT, calc_ch2, CHANGE);
+  enableInterrupt(RC_CH3_INPUT, calc_ch3, CHANGE);
+  enableInterrupt(RC_CH4_INPUT, calc_ch4, CHANGE);
 }
- 
+
 void loop() {
-  delay(1000);
-  
-  if(abs(pwm_2WAY-RC_DOWN)<RC_ERROR){
-    pos_2WAY = "DOWN";
-  }
-  else if(abs(pwm_2WAY-RC_UP)<RC_ERROR){
-    pos_2WAY = "UP";
-  }
-  else{
-    pos_2WAY = "UNKNOWN";
-  }
+  rc_read_values();
 
-  if(abs(pwm_3WAY-RC_DOWN)<RC_ERROR){
-    pos_3WAY = "DOWN";
-  }
-  else if(abs(pwm_3WAY-RC_CENTRE)<RC_ERROR){
-    pos_3WAY = "CENTRE";
-  }
-  else if(abs(pwm_3WAY-RC_UP)<RC_ERROR){
-    pos_3WAY = "UP";
-  }
-  else{
-    pos_3WAY = "UNKNOWN";
-  }
-  
-  Serial.print("2 WAY SWITCH position = ");
-  Serial.println(pos_2WAY); 
-  Serial.print("3 WAY SWITCH position = ");
-  Serial.println(pos_3WAY); 
-}
- 
-void rising_2WAY() {
-  attachInterrupt(PIN_2WAY, falling_2WAY, FALLING);
-  init_2WAY = micros();
-}
- 
-void falling_2WAY() {
-  attachInterrupt(PIN_2WAY, rising_2WAY, RISING);
-  pwm_2WAY = micros()-init_2WAY;
-}
+  Serial.print("F3(Foc): "); Serial.print(rc_values[RC_CH1]); Serial.print("\t");
+  Serial.print("F4(Pal): "); Serial.print(rc_values[RC_CH2]); Serial.print("\t");
+  Serial.print("F5(HSE): "); Serial.print(rc_values[RC_CH3]); Serial.print("\t");
+  Serial.print("F6(Rec): "); Serial.println(rc_values[RC_CH4]);
 
-void rising_3WAY() {
-  attachInterrupt(PIN_3WAY, falling_3WAY, FALLING);
-  init_3WAY = micros();
-}
- 
-void falling_3WAY() {
-  attachInterrupt(PIN_3WAY, rising_3WAY, RISING);
-  pwm_3WAY = micros()-init_3WAY;
+  delay(500);
 }
